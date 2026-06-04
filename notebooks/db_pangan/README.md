@@ -1,0 +1,1 @@
+This directory contains the persistent storage files for the RAG (Retrieval-Augmented Generation) system. These files include the ChromaDB sqlite database, binary index files, and metadata pickles required for efficient document retrieval and semantic search. Please ensure these files are kept in this directory to maintain the system's indexing integrity.
