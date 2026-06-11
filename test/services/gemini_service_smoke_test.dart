@@ -21,7 +21,7 @@ void main() {
       } catch (e) {
         fail("Gagal memanggil API Gemini: $e");
       }
-    }, skip: SupabaseConfig.geminiApiKey.isEmpty);
+    }, skip: SupabaseConfig.geminiApiKeys.isEmpty);
 
     test('Harus bisa membuat judul otomatis dari pesan user', () async {
       try {
@@ -34,6 +34,6 @@ void main() {
       } catch (e) {
         fail("Gagal membuat judul: $e");
       }
-    }, skip: SupabaseConfig.geminiApiKey.isEmpty);
+    }, skip: SupabaseConfig.geminiApiKeys.isEmpty);
   });
 }

@@ -167,6 +167,30 @@ class _UserChatHomeScreenState extends State<UserChatHomeScreen> {
         role: 'user',
       );
 
+      // Ambil riwayat lengkap dari database
+      final allMessages = await _chatService.getMessages(_currentSessionId!);
+      
+      // History yang dikirim ke Gemini adalah SEMUA pesan SEBELUM pesan yang sedang diproses.
+      // Karena kita baru saja menyimpan pesan User terbaru ke DB, maka dia ada di urutan terakhir.
+      // Kita ambil N-1 pesan pertama sebagai history.
+      final List<ai.Content> geminiHistory = [];
+      if (allMessages.length > 1) {
+        for (int i = 0; i < allMessages.length - 1; i++) {
+          final m = allMessages[i];
+          geminiHistory.add(ai.Content(
+            m.role == 'user' ? 'user' : 'model',
+            [ai.TextPart(m.content)],
+          ));
+        }
+      }
+
+      // Validasi urutan history untuk mencegah error "Invalid Sequence" (User -> Model -> User)
+      // Jika history tidak kosong, pesan TERAKHIR di history HARUS dari 'model' (assistant)
+      // karena prompt berikutnya yang dikirim adalah dari 'user'.
+      if (geminiHistory.isNotEmpty && geminiHistory.last.role == 'user') {
+        geminiHistory.removeLast();
+      }
+
       // 2. RAG Flow
       final relevantItems = _nutrisiService.retrieve(messageContent);
       final contextText = _nutrisiService.formatContext(relevantItems);
@@ -177,18 +201,7 @@ class _UserChatHomeScreenState extends State<UserChatHomeScreen> {
         userQuestion: messageContent,
       );
 
-      // 4. Ambil History
-      final historyMessages =
-      await _chatService.getMessages(_currentSessionId!);
-      final geminiHistory = historyMessages
-          .take(historyMessages.length - 1)
-          .map((msg) => ai.Content(
-        msg.role == 'user' ? 'user' : 'model',
-        [ai.TextPart(msg.content)],
-      ))
-          .toList();
-
-      // 5. Streaming ke Gemini
+      // 4. Streaming ke Gemini
       final buffer = StringBuffer();
       await for (final chunk in _geminiService.generateResponseStream(
         prompt: fullPrompt,
@@ -206,18 +219,24 @@ class _UserChatHomeScreenState extends State<UserChatHomeScreen> {
           ? 'Maaf, saya tidak dapat memproses permintaan Anda saat ini.'
           : buffer.toString();
 
-      // 6. Simpan jawaban AI ke DB
+      // 5. Simpan jawaban AI ke DB
       await _chatService.sendMessage(
         sessionId: _currentSessionId!,
         content: finalReply,
         role: 'assistant',
       );
     } catch (e) {
+      debugPrint('Chat AI Error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'AI sedang sibuk atau koneksi terputus. Silakan coba lagi.'),
+          SnackBar(
+            content: Text('AI sedang sibuk atau ada masalah: $e'),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Coba Lagi',
+              textColor: Colors.white,
+              onPressed: () => _sendMessage(text),
+            ),
           ),
         );
       }
@@ -309,6 +328,54 @@ class _UserChatHomeScreenState extends State<UserChatHomeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Gagal menghapus: $e')),
         );
+      }
+    }
+  }
+
+  // ─── Rename Session ──────────────────────────
+  Future<void> _renameSession(ChatSession session) async {
+    final TextEditingController controller =
+        TextEditingController(text: session.title);
+    final newTitle = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Ubah Nama Chat'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Judul Baru',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+
+    if (newTitle != null &&
+        newTitle.trim().isNotEmpty &&
+        newTitle != session.title) {
+      try {
+        await _chatService.updateSessionTitle(
+          sessionId: session.id,
+          newTitle: newTitle.trim(),
+        );
+        _loadSessions();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Gagal mengubah nama: $e')),
+          );
+        }
       }
     }
   }
@@ -541,17 +608,37 @@ class _UserChatHomeScreenState extends State<UserChatHomeScreen> {
               isSelected ? const Color(0xFF0284C7) : Colors.black87,
             ),
           ),
-          trailing: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () => _deleteSession(session),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Icon(
-                Icons.delete_outline,
-                size: 16,
-                color: Colors.grey.shade400,
+          trailing: PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, size: 18, color: Colors.grey.shade400),
+            onSelected: (value) {
+              if (value == 'rename') {
+                _renameSession(session);
+              } else if (value == 'delete') {
+                _deleteSession(session);
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'rename',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_outlined, size: 18),
+                    SizedBox(width: 8),
+                    Text('Ubah Nama'),
+                  ],
+                ),
               ),
-            ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Hapus', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
           ),
           onTap: () {
             setState(() {

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nutriginjal/data/models/profile_model.dart';
 
@@ -54,5 +55,47 @@ class ProfileService {
       'full_name': fullName,
       if (avatarUrl != null) 'avatar_url': avatarUrl,
     }).eq('id', userId);
+  }
+
+  // Fungsi baru untuk upload foto profil
+  Future<String?> uploadAvatar(File imageFile) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return null;
+
+    try {
+      final fileName = '${user.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final path = 'profile_pics/$fileName';
+
+      print('Mencoba upload ke bucket avatars: $path');
+
+      // 1. Upload ke bucket 'avatars'
+      await _supabase.storage.from('avatars').upload(
+        path,
+        imageFile,
+        fileOptions: const FileOptions(upsert: true),
+      );
+
+      // 2. Dapatkan URL publik
+      final String publicUrl = _supabase.storage.from('avatars').getPublicUrl(path);
+      print('Upload berhasil. URL: $publicUrl');
+
+      // 3. Update alamat avatar di tabel profiles
+      final currentProfile = await getMyProfile();
+      await _supabase.from('profiles').update({
+        'avatar_url': publicUrl,
+      }).eq('id', user.id);
+
+      print('Database profile berhasil diupdate dengan URL baru.');
+      return publicUrl;
+    } on StorageException catch (e) {
+      print('Error Storage Supabase: ${e.message} (Code: ${e.statusCode})');
+      return null;
+    } on PostgrestException catch (e) {
+      print('Error Database Supabase: ${e.message}');
+      return null;
+    } catch (e) {
+      print('Error tidak terduga saat upload: $e');
+      return null;
+    }
   }
 }

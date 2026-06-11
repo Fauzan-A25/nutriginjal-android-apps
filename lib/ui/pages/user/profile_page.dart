@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:nutriginjal/services/auth_service.dart';
 import 'package:nutriginjal/services/profile_service.dart';
 import 'package:nutriginjal/data/models/profile_model.dart';
@@ -13,9 +15,11 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final AuthService _authService = AuthService();
   final ProfileService _profileService = ProfileService();
+  final ImagePicker _picker = ImagePicker();
 
   Profile? _profile;
   bool _isLoading = true;
+  bool _isUploading = false;
 
   @override
   void initState() {
@@ -30,6 +34,31 @@ class _ProfilePageState extends State<ProfilePage> {
         _profile = profile;
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _pickAndUploadImage() async {
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 50, // Kompresi agar hemat storage
+    );
+
+    if (image == null) return;
+
+    setState(() => _isUploading = true);
+
+    try {
+      final url = await _profileService.uploadAvatar(File(image.path));
+      if (url != null) {
+        await _loadProfile();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Foto profil berhasil diperbarui!')),
+          );
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -153,13 +182,7 @@ class _ProfilePageState extends State<ProfilePage> {
             label: 'Ubah Foto Profil',
             icon: Icons.camera_alt_outlined,
             iconColor: const Color(0xFF26C6DA),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Fitur ubah foto akan segera hadir'),
-                ),
-              );
-            },
+            onTap: _pickAndUploadImage,
           ),
           _buildActionTile(
             label: 'Ubah Nama',
@@ -213,21 +236,16 @@ class _ProfilePageState extends State<ProfilePage> {
                     ? NetworkImage(avatarUrl)
                     : null,
                 child: avatarUrl == null || avatarUrl.isEmpty
-                    ? const Icon(Icons.person,
-                    size: 48, color: Color(0xFF26C6DA))
+                    ? (_isUploading 
+                        ? const CircularProgressIndicator()
+                        : const Icon(Icons.person, size: 48, color: Color(0xFF26C6DA)))
                     : null,
               ),
               Positioned(
                 bottom: 0,
                 right: 0,
                 child: GestureDetector(
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Fitur ubah foto akan segera hadir'),
-                      ),
-                    );
-                  },
+                  onTap: _pickAndUploadImage,
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
@@ -236,8 +254,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       border:
                       Border.all(color: Colors.white, width: 2),
                     ),
-                    child: const Icon(Icons.camera_alt,
-                        size: 14, color: Colors.white),
+                    child: _isUploading 
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.camera_alt, size: 14, color: Colors.white),
                   ),
                 ),
               ),
