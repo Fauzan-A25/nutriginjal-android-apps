@@ -7,7 +7,7 @@
 ## 📲 Download & Coba Aplikasi
 Coba langsung aplikasi NutriGinjal di perangkat Android Anda dengan mengunduh file APK melalui tautan di bawah ini:
 
-[![Download APK Android](https://img.shields.io/badge/Download-APK_Android-0077b5?style=for-the-badge&logo=android&logoColor=white)](https://drive.google.com/file/d/1FbIeKtgL6ulnaiwcdt0vdZSSo7JjBRGE/view?usp=sharing)
+[![Download APK Android](https://img.shields.io/badge/Download-APK_Android-0077b5?style=for-the-badge&logo=android&logoColor=white)](https://drive.google.com/file/d/17yrGmR_jhDxFZu_y-gZxwdEolMlzN122/view?usp=sharing)
 
 ---
 
